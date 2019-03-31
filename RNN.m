@@ -3,13 +3,12 @@ load mehamn_data.txt;
 %assign training set for Y
 data_output = (mehamn_data(:,9));
 
-
 figure
 plot(data_output)
 xlabel("time")
 ylabel("height")
 title("Height")
-1
+
 %---------------------------------------------------------------------------
 %input set : 15 features
 for i = 2:17
@@ -21,35 +20,36 @@ dataInput_i(:,[1:15]) = dataInput(:,[1:7 9:16]);
 figure
 plot(dataInput_i)
 title("data_INPUT")
-2
 
+%split dataset-------------------------------------------------------------
 numTimeStepsTrain = floor(0.9*numel(dataInput_i(:,1)));
 dataTrain = dataInput_i([1:numTimeStepsTrain+1],:);
 dataTrain_Y = data_output(1:numTimeStepsTrain+1);
 dataTest = dataInput_i([numTimeStepsTrain+1:end],:);
+dataTest_Y = data_output([numTimeStepsTrain+1:end],:);
 
-mu = mean(dataTrain_Y);
-sig = std(dataTrain_Y);
-dataTrainStandardized_Y = (dataTrain_Y - mu) / sig;
-
-
+%standardize the training dataset------------------------------------------
 for i = 1:15
     mu(1,i) = mean(dataTrain(:,i));
     sig(1,i) = std(dataTrain(:,i));  
 end
-   
+dataTrainStandardized_f = rand(157123,15); 
+
 for i = 1:15
 dataTrainStandardized_f(:,i) = (dataTrain(:,i) - mu(1,i)) / sig(1,i);
 end
+
+%standardize the output data set------------------------------------------
+mu_Y = mean(dataTrain_Y);
+sig_Y = std(dataTrain_Y);
+dataTrainStandardized_Y = (dataTrain_Y - mu_Y) / sig_Y;
 
 figure
 plot(dataTrainStandardized_f)
 title('dataTrainStandardized_f')
 3
 
-XTrain = dataTrainStandardized_f([1:end-8],:);
-
-
+XTrain = dataTrain([1:end-8],:);
 YTrain = dataTrainStandardized_Y(9:end);
 
 %---------------------------training----------------------------------------
@@ -82,31 +82,46 @@ net = trainNetwork(X1,Y,layers,options);
 
 %-------------------------------------------------------------
 
+
+dataTestStandardized_f = rand(17459,15); 
 for i = 1:15
-mu(1,i) = mean(dataTest(:,1));
-sig(1,i) = std(dataTest(:,1));
-dataTestStandardized(:,i) = (dataTest(:,i) - mu(1,i))/sig(1,i);
+dataTestStandardized_f(:,i) = (dataTest(:,i) - mu(1,i)) / sig(1,i);
 end
 
-XTest = dataTestStandardized([1:end-8],:);
+XTest = dataTestStandardized_f([1:end-8],:);
 X = transpose(XTest);
 
 net = predictAndUpdateState(net,X1);
-[net,YPred] = predictAndUpdateState(net,Y(end));
 
-numTimeStepsTest = numel(X(:,1));
-
-for i = 9:numTimeStepsTest
-    [net,YPred(:,i)] = predictAndUpdateState(net,YPred(:,i-8),'ExecutionEnvironment','gpu');
+for i = 1:8
+[net,YPred(:,i)] = predictAndUpdateState(net,X(:,end+i-8));
 end
-0
-YPred = sig*YPred + mu;
-YTest = dataTest(9:end);
-rmse = sqrt(mean((YPred-YTest).^2))
+
+numTimeStepsTest = numel(X(1,:))+8;
+
+for i = 1:numTimeStepsTest-8
+    [net,YPred(:,i+8)] = predictAndUpdateState(net,X(:,i),'ExecutionEnvironment','gpu');
+    
+end
+
+fprintf('key')
+pause
 1
+Y_Pred = rand(1,17459);
+Y_Pred(1,:) = YPred(1,:);
+YPred = rand(1,17459);
+YPred(1,:) = Y_Pred(1,:)
+
+fprintf('key')
+pause
+YPred = sig_Y*YPred + mu_Y;
+YTest = dataTest_Y(1:end);
+rmse = sqrt(mean((YPred-YTest).^2))
+fprintf('key')
+pause
 
 figure
-plot(dataTrain_Y(1:end-8))
+plot(dataTrain_Y(1:end))
 hold on
 idx = numTimeStepsTrain:(numTimeStepsTrain+numTimeStepsTest);
 plot(idx,[data_output(numTimeStepsTrain) YPred],'.-')
@@ -126,11 +141,12 @@ legend(["Observed" "Forecast"])
 ylabel("Cases")
 title("Forecast")
 
-fprintf('press any key \n')
+fprintf('key')
 pause
+
+YPred = transpose(YPred);
 
 subplot(2,1,2)
 stem(YPred - YTest)
 xlabel("Month")
 ylabel("Error")
-title("RMSE = " + rmse)
